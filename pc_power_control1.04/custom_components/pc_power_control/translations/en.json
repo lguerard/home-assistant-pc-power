@@ -1,0 +1,17 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add PC",
+        "description": "Configure your PC to wake and shutdown.",
+        "data": {
+          "name": "Name",
+          "host": "IP Address",
+          "mac": "MAC Address",
+          "username": "SSH Username",
+          "password": "SSH Password"
+        }
+      }
+    }
+  }
+}

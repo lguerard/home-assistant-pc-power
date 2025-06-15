@@ -15,22 +15,54 @@ Control the power state of a Windows PC from Home Assistant using:
 
 ---
 
-## 📦 Installation
+## 🧰 Installation
 
-### HACS (recommended)
-1. Add this repository as a custom repository in HACS.
-2. Install `PC Power Control`.
-3. Restart Home Assistant.
-4. Configure via **Settings → Devices & Services → Add Integration → PC Power Control**.
+You can install this integration using either **HACS** (recommended) or **manual setup**.
 
-### Manual
-1. Download or clone this repo.
-2. Copy the `pc_power_control` folder to:
+---
+
+### ✅ Option 1: Install via HACS (Custom Repository)
+
+1. Open Home Assistant and go to **HACS → Integrations**.
+2. Click the **⋮ menu (top right)** → **Custom repositories**.
+3. Add this repository:
+
    ```
-   /config/custom_components/
+   https://github.com/Timman70/home-assistant-pc-power
    ```
-3. Restart Home Assistant.
-4. Configure via **Settings → Devices & Services**.
+
+4. Set category to **Integration**, then click **Add**.
+5. Go back to **HACS → Integrations**, search for **PC Power Control**, and install it.
+6. Restart Home Assistant.
+7. Go to **Settings → Devices & Services → + Add Integration**, then search for **PC Power Control**.
+
+---
+
+### 🛠 Option 2: Manual Installation
+
+If you don’t use HACS:
+
+1. Download this repository as a ZIP:  
+   [https://github.com/Timman70/home-assistant-pc-power/archive/refs/heads/main.zip](https://github.com/Timman70/home-assistant-pc-power/archive/refs/heads/main.zip)
+
+2. Extract it.
+
+3. Copy the folder `pc_power_control` to your Home Assistant config:
+
+   ```
+   /config/custom_components/pc_power_control/
+   ```
+
+   You should now have files like:
+
+   ```
+   /config/custom_components/pc_power_control/__init__.py
+   /config/custom_components/pc_power_control/manifest.json
+   /config/custom_components/pc_power_control/switch.py
+   ```
+
+4. Restart Home Assistant.
+5. Go to **Settings → Devices & Services → + Add Integration**, then search for **PC Power Control**.
 
 ---
 
@@ -99,7 +131,7 @@ mode: single
 ## 👤 Developer
 
 Created by **TimCloud**  
-🔗 [github.com/TimCloud](https://github.com/TimCloud)
+🔗 [github.com/Timman70](https://github.com/Timman70)
 
 ---
 

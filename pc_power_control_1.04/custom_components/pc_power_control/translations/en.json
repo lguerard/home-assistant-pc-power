@@ -1,0 +1,20 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "PC Power Control",
+                "description": "Configure your PC's MAC and IP address",
+                "data": {
+                    "name": "Name",
+                    "host": "Host",
+                    "mac": "MAC Address",
+                    "username": "SSH Username",
+                    "password": "SSH Password"
+                }
+            }
+        }
+    },
+    "flow_error": {
+        "duplicate_host_or_mac": "This IP or MAC address is already configured."
+    }
+}

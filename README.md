@@ -3,6 +3,7 @@
 Control the power state of a Windows PC from Home Assistant using:
 - 🔌 Wake-on-LAN to turn it on
 - 🔒 SSH to safely shut it down
+- ⚙️ Full configuration from the Home Assistant UI
 
 ---
 
@@ -10,8 +11,11 @@ Control the power state of a Windows PC from Home Assistant using:
 
 - **Turn on** your PC using Wake-on-LAN
 - **Turn off** your PC over SSH with proper shutdown command
-- **Status detection** using SSH reachability
+- **Status detection** using ping
 - Works with Windows PCs (SSH server required)
+- Configure and edit PC settings directly from Home Assistant UI
+- Supports multiple PCs as separate entries
+- Prevents duplicates based on IP and MAC address
 
 ---
 
@@ -82,6 +86,19 @@ When adding the integration, you'll need:
 
 ---
 
+### ✏️ Editing PC Settings
+
+After setup, click **Configure** on the integration to change:
+- IP address
+- MAC address
+- Username
+- Password
+- Name
+
+All settings are editable directly in the Home Assistant UI.
+
+---
+
 ## 🛠 Requirements on Windows PC
 
 - Enable **Wake-on-LAN** in BIOS and network adapter settings.
@@ -95,10 +112,24 @@ When adding the integration, you'll need:
 
 ## 📡 Entity Behavior
 
-- The switch entity reflects real-time power state using SSH reachability.
-- Turning off uses:  
+- The switch entity reflects real-time power state using **ping**.
+- Turning **on** uses Wake-on-LAN magic packet
+- Turning **off** uses:  
   `C:\Windows\System32\shutdown.exe /s /f /t 0`
 - Logging shows success/error for debugging.
+
+---
+
+## 🧪 Troubleshooting
+
+If you see:
+
+> `Config flow could not be loaded: 500 Internal Server Error`
+
+Make sure:
+- You deleted all `__pycache__` folders from `/config/custom_components/pc_power_control/`
+- You're using the latest version of the integration
+- You restarted Home Assistant fully after installing
 
 ---
 

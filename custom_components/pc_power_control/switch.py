@@ -26,6 +26,11 @@ class PCPowerSwitch(SwitchEntity):
         self._attr_unique_id = f"pc_power_{mac.replace(':', '').lower()}"
         self._attr_icon = "mdi:desktop-classic"
 
+    @property
+    def is_on(self):
+        # Implement logic to check actual PC state
+        return self._attr_is_on
+
     async def async_turn_on(self, **kwargs):
         _LOGGER.info("Sending Wake-on-LAN to MAC %s", self._mac)
         wakeonlan.send_magic_packet(self._mac)

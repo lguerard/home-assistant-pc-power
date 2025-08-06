@@ -13,5 +13,5 @@
     "dependencies": [],
     "iot_class": "local_polling",
     "documentation": "https://github.com/Timman70/home-assistant-pc-power",
-    "supported_platforms": ["switch"]
+    "supported_features": ["switch"]
 }

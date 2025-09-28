@@ -11,6 +11,9 @@ from .const import (
     ATTR_COMMAND,
     ATTR_TIMEOUT,
     DEFAULT_SSH_TIMEOUT,
+    MONITOR_TIMEOUT_CHECK_COMMAND,
+    MONITOR_TIMEOUT_DISABLED_COMMAND,
+    MONITOR_TIMEOUT_ENABLED_COMMAND,
     SERVICE_SEND_COMMAND,
 )
 
@@ -20,7 +23,9 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up PC Power Control switches."""
     data = config_entry.data
-    switch = PCPowerSwitch(
+
+    # Create main power switch
+    power_switch = PCPowerSwitch(
         data["name"],
         data["host"],
         data["mac"],
@@ -29,7 +34,19 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         data.get("ssh_port", 22),
         data.get("ssh_timeout", DEFAULT_SSH_TIMEOUT),
     )
-    async_add_entities([switch])
+
+    # Create monitor timeout switch
+    monitor_switch = PCMonitorTimeoutSwitch(
+        data["name"],
+        data["host"],
+        data["username"],
+        data["password"],
+        data.get("ssh_port", 22),
+        data.get("ssh_timeout", DEFAULT_SSH_TIMEOUT),
+        power_switch,  # Pass reference to power switch
+    )
+
+    async_add_entities([power_switch, monitor_switch])
 
     # Register the SSH command service
     platform = entity_platform.async_get_current_platform()
@@ -198,6 +215,230 @@ class PCPowerSwitch(SwitchEntity):
                     _LOGGER.warning("Command stderr: %s", result["stderr"])
             else:
                 _LOGGER.error("SSH command execution failed")
+
+            return result
+
+        except Exception as e:
+            _LOGGER.error("SSH command execution error: %s", e)
+            return None
+
+    def _ssh_execute_sync(self, command: str, timeout: int) -> dict | None:
+        """Synchronous SSH command execution helper.
+
+        Parameters
+        ----------
+        command : str
+            The command to execute.
+        timeout : int
+            SSH connection timeout in seconds.
+
+        Returns
+        -------
+        dict | None
+            Dictionary with command results or None if failed.
+        """
+        import paramiko
+
+        ssh = None
+        try:
+            ssh = paramiko.SSHClient()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            ssh.connect(
+                self._host,
+                port=self._ssh_port,
+                username=self._username,
+                password=self._password,
+                timeout=timeout,
+            )
+
+            stdin, stdout, stderr = ssh.exec_command(command, timeout=timeout)
+
+            # Wait for command completion
+            exit_status = stdout.channel.recv_exit_status()
+
+            stdout_text = stdout.read().decode("utf-8", errors="replace").strip()
+            stderr_text = stderr.read().decode("utf-8", errors="replace").strip()
+
+            return {
+                "stdout": stdout_text,
+                "stderr": stderr_text,
+                "return_code": exit_status,
+            }
+
+        except Exception as e:
+            _LOGGER.error("SSH connection/execution error: %s", e)
+            return None
+        finally:
+            if ssh:
+                try:
+                    ssh.close()
+                except Exception:
+                    pass
+
+
+class PCMonitorTimeoutSwitch(SwitchEntity):
+    """Monitor Timeout Control Switch Entity."""
+
+    def __init__(
+        self,
+        pc_name: str,
+        host: str,
+        username: str,
+        password: str,
+        ssh_port: int = 22,
+        ssh_timeout: int = DEFAULT_SSH_TIMEOUT,
+        power_switch: PCPowerSwitch = None,
+    ):
+        """Initialize the Monitor Timeout Switch.
+
+        Parameters
+        ----------
+        pc_name : str
+            The name of the PC for entity naming.
+        host : str
+            The IP address or hostname of the remote PC.
+        username : str
+            SSH username for remote PC access.
+        password : str
+            SSH password for remote PC access.
+        ssh_port : int, optional
+            SSH port number (default is 22).
+        ssh_timeout : int, optional
+            SSH connection timeout in seconds (default is 30).
+        power_switch : PCPowerSwitch, optional
+            Reference to the main power switch for status checking.
+        """
+        self._host = host
+        self._username = username
+        self._password = password
+        self._ssh_port = ssh_port
+        self._ssh_timeout = ssh_timeout
+        self._power_switch = power_switch
+        self._pc_name = pc_name
+
+        self._attr_name = f"{pc_name} Monitor Timeout"
+        self._attr_should_poll = True
+        self._attr_is_on = None  # Unknown initially
+        self._attr_unique_id = f"pc_monitor_timeout_{host.replace('.', '_')}"
+        self._attr_icon = "mdi:monitor-off"
+        self._attr_device_class = None
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available.
+
+        The monitor timeout switch is only available when the PC is online.
+        """
+        if self._power_switch:
+            return self._power_switch.is_on
+        return True  # Fallback if no power switch reference
+
+    @property
+    def is_on(self) -> bool:
+        """Return true if monitor timeout is enabled (30 minutes)."""
+        return self._attr_is_on
+
+    async def async_turn_on(self, **kwargs):
+        """Turn on monitor timeout (set to 30 minutes)."""
+        try:
+            _LOGGER.info("Enabling monitor timeout (30 min) on %s", self._host)
+            result = await self._execute_ssh_command(MONITOR_TIMEOUT_ENABLED_COMMAND)
+            if result and result.get("return_code") == 0:
+                self._attr_is_on = True
+                _LOGGER.info("Monitor timeout enabled successfully")
+            else:
+                _LOGGER.error(
+                    "Failed to enable monitor timeout: %s",
+                    result.get("stderr", "Unknown error"),
+                )
+        except Exception as e:
+            _LOGGER.error("Failed to enable monitor timeout: %s", e)
+
+    async def async_turn_off(self, **kwargs):
+        """Turn off monitor timeout (disable - never timeout)."""
+        try:
+            _LOGGER.info("Disabling monitor timeout on %s", self._host)
+            result = await self._execute_ssh_command(MONITOR_TIMEOUT_DISABLED_COMMAND)
+            if result and result.get("return_code") == 0:
+                self._attr_is_on = False
+                _LOGGER.info("Monitor timeout disabled successfully")
+            else:
+                _LOGGER.error(
+                    "Failed to disable monitor timeout: %s",
+                    result.get("stderr", "Unknown error"),
+                )
+        except Exception as e:
+            _LOGGER.error("Failed to disable monitor timeout: %s", e)
+
+    async def async_update(self):
+        """Update the current monitor timeout state."""
+        if not self.available:
+            self._attr_is_on = None
+            return
+
+        try:
+            # Query current monitor timeout setting
+            result = await self._execute_ssh_command(MONITOR_TIMEOUT_CHECK_COMMAND)
+            if result and result.get("return_code") == 0:
+                output = result.get("stdout", "")
+                # Parse the output to determine current timeout
+                # powercfg output shows timeout in seconds (0x00000000 = disabled, 0x00000708 = 30 min = 1800 seconds)
+                if "0x00000000" in output:
+                    self._attr_is_on = False  # Timeout disabled
+                elif "0x00000708" in output or "1800" in output:
+                    self._attr_is_on = True  # 30 minute timeout
+                else:
+                    # Try to extract timeout value and determine if it's enabled
+                    import re
+
+                    hex_match = re.search(r"0x([0-9a-fA-F]+)", output)
+                    if hex_match:
+                        timeout_seconds = int(hex_match.group(1), 16)
+                        self._attr_is_on = timeout_seconds > 0
+                    else:
+                        _LOGGER.debug(
+                            "Could not parse monitor timeout output: %s", output
+                        )
+            else:
+                _LOGGER.debug("Failed to query monitor timeout status")
+        except Exception as e:
+            _LOGGER.debug("Error updating monitor timeout status: %s", e)
+
+    async def _execute_ssh_command(
+        self, command: str, timeout: int = None
+    ) -> dict | None:
+        """Execute a command on the remote PC via SSH.
+
+        Parameters
+        ----------
+        command : str
+            The command to execute.
+        timeout : int, optional
+            SSH connection and command timeout in seconds.
+
+        Returns
+        -------
+        dict | None
+            Dictionary with stdout, stderr, and return_code if successful, None if failed.
+        """
+        if timeout is None:
+            timeout = self._ssh_timeout
+
+        try:
+            _LOGGER.debug("Executing SSH command on %s: %s", self._host, command)
+
+            # Run SSH connection in executor to avoid blocking
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None, self._ssh_execute_sync, command, timeout
+            )
+
+            if result:
+                _LOGGER.debug("SSH command executed successfully")
+                if result.get("stderr"):
+                    _LOGGER.debug("Command stderr: %s", result["stderr"])
+            else:
+                _LOGGER.debug("SSH command execution failed")
 
             return result
 

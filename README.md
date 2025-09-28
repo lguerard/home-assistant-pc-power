@@ -114,11 +114,22 @@ All settings are editable directly in the Home Assistant UI.
 
 ## 📡 Entity Behavior
 
-- The switch entity reflects real-time power state using **ping**.
+The integration creates **two switch entities** for each configured PC:
+
+### 🔌 **Main Power Switch** (`switch.{pc_name}`)
+- Reflects real-time power state using **ping**
 - Turning **on** uses Wake-on-LAN magic packet
-- Turning **off** uses:
-  `C:\Windows\System32\shutdown.exe /s /f /t 0`
-- Logging shows success/error for debugging.
+- Turning **off** uses: `C:\Windows\System32\shutdown.exe /s /f /t 0`
+- Always available for control
+
+### 🖥️ **Monitor Timeout Switch** (`switch.{pc_name}_monitor_timeout`)
+- Controls Windows monitor timeout setting (30 minutes vs never)
+- Turning **on** sets: `powercfg -change -monitor-timeout-ac 30`
+- Turning **off** sets: `powercfg -change -monitor-timeout-ac 0`
+- **Only available when PC is online** (becomes "unavailable" when PC is off)
+- Automatically detects current timeout state from Windows
+
+Both switches include logging for success/error debugging.
 
 ---
 

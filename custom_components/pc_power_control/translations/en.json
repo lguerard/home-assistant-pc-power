@@ -49,6 +49,17 @@
       }
     }
   },
+  "entity": {
+    "switch": {
+      "monitor_timeout": {
+        "name": "Monitor Timeout",
+        "state": {
+          "on": "30 minutes",
+          "off": "Never"
+        }
+      }
+    }
+  },
   "flow_error": {
     "duplicate_host_or_mac": "This IP or MAC address is already configured."
   }

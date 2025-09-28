@@ -1,7 +1,7 @@
 {
   "domain": "pc_power_control",
   "name": "PC Power Control",
-  "version": "1.05",
+  "version": "1.06",
   "config_flow": true,
   "requirements": ["wakeonlan", "paramiko"],
   "codeowners": ["@you"],

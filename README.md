@@ -139,34 +139,32 @@ The integration provides a service to send custom commands to your PC via SSH:
 
 ### Service: `pc_power_control.send_ssh_command`
 
+**✨ Automatically uses your PC Power Control integration configuration!**
+
 **Parameters:**
 - `command` (required): The command to execute on the remote PC
 - `timeout` (optional): Command timeout in seconds (default: configured SSH timeout)
+- `pc_name` (optional): PC name if you have multiple PCs configured
 
 **Examples:**
 
 ```yaml
-# Check disk space
+# Simple usage (uses your configured PC automatically)
 service: pc_power_control.send_ssh_command
-target:
-  entity_id: switch.my_pc
 data:
   command: "dir C:\\"
 
-# Restart a service
+# With custom timeout
 service: pc_power_control.send_ssh_command
-target:
-  entity_id: switch.my_pc
 data:
   command: "net restart spooler"
   timeout: 60
 
-# Get system information
+# Multiple PCs - specify which one
 service: pc_power_control.send_ssh_command
-target:
-  entity_id: switch.my_pc
 data:
   command: "systeminfo | findstr /C:\"Total Physical Memory\""
+  pc_name: "My Gaming PC"
 ```
 
 **Response:** The service returns a dictionary with:

@@ -6,6 +6,7 @@ SERVICE_SEND_COMMAND = "send_ssh_command"
 # Service attributes
 ATTR_COMMAND = "command"
 ATTR_TIMEOUT = "timeout"
+ATTR_PC_NAME = "pc_name"
 
 # Default values
 DEFAULT_SSH_TIMEOUT = 30

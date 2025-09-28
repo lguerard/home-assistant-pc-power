@@ -1,0 +1,29 @@
+send_ssh_command:
+  name: Send SSH Command
+  description: Send a custom command to the PC via SSH (automatically uses integration configuration)
+  fields:
+    command:
+      name: Command
+      description: The command to execute on the remote PC
+      required: true
+      example: "dir C:\\"
+      selector:
+        text:
+    timeout:
+      name: Timeout
+      description: Command timeout in seconds (optional, uses configured SSH timeout if not specified)
+      required: false
+      default: 30
+      example: 60
+      selector:
+        number:
+          min: 1
+          max: 300
+          unit_of_measurement: seconds
+    pc_name:
+      name: PC Name
+      description: Name of the PC to send command to (optional if only one PC configured)
+      required: false
+      example: "My Gaming PC"
+      selector:
+        text:

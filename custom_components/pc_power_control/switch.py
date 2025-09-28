@@ -2,19 +2,15 @@ import asyncio
 import logging
 from asyncio.subprocess import PIPE
 
-import voluptuous as vol
 import wakeonlan
 from homeassistant.components.switch import SwitchEntity
-from homeassistant.helpers import entity_platform
 
 from .const import (
-    ATTR_COMMAND,
-    ATTR_TIMEOUT,
     DEFAULT_SSH_TIMEOUT,
+    DOMAIN,
     MONITOR_TIMEOUT_CHECK_COMMAND,
     MONITOR_TIMEOUT_DISABLED_COMMAND,
     MONITOR_TIMEOUT_ENABLED_COMMAND,
-    SERVICE_SEND_COMMAND,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -48,16 +44,9 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 
     async_add_entities([power_switch, monitor_switch])
 
-    # Register the SSH command service
-    platform = entity_platform.async_get_current_platform()
-    platform.async_register_entity_service(
-        SERVICE_SEND_COMMAND,
-        {
-            vol.Required(ATTR_COMMAND): str,
-            vol.Optional(ATTR_TIMEOUT, default=DEFAULT_SSH_TIMEOUT): int,
-        },
-        "async_send_ssh_command",
-    )
+    # Store switch reference for domain service
+    hass.data[DOMAIN].setdefault("switches", {})
+    hass.data[DOMAIN]["switches"][data["name"]] = power_switch
 
 
 class PCPowerSwitch(SwitchEntity):

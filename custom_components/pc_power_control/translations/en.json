@@ -36,7 +36,7 @@
   "services": {
     "send_ssh_command": {
       "name": "Send SSH Command",
-      "description": "Send a custom command to the PC via SSH",
+      "description": "Send a custom command to the PC via SSH (automatically uses integration configuration)",
       "fields": {
         "command": {
           "name": "Command",
@@ -45,6 +45,10 @@
         "timeout": {
           "name": "Timeout",
           "description": "Command timeout in seconds (optional)"
+        },
+        "pc_name": {
+          "name": "PC Name",
+          "description": "Name of the PC to send command to (optional if only one PC configured)"
         }
       }
     }

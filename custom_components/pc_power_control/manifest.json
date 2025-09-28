@@ -1,17 +1,12 @@
 {
-    "domain": "pc_power_control",
-    "name": "PC Power Control",
-    "version": "1.04",
-    "config_flow": true,
-    "requirements": [
-        "wakeonlan",
-        "paramiko"
-    ],
-    "codeowners": [
-        "@you"
-    ],
-    "dependencies": [],
-    "iot_class": "local_polling",
-    "documentation": "https://github.com/Timman70/home-assistant-pc-power",
-    "supported_features": ["switch"]
+  "domain": "pc_power_control",
+  "name": "PC Power Control",
+  "version": "1.05",
+  "config_flow": true,
+  "requirements": ["wakeonlan", "paramiko"],
+  "codeowners": ["@you"],
+  "dependencies": [],
+  "iot_class": "local_polling",
+  "documentation": "https://github.com/Timman70/home-assistant-pc-power",
+  "supported_features": ["switch"]
 }

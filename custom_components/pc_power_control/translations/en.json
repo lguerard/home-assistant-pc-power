@@ -1,20 +1,55 @@
 {
-    "config": {
-        "step": {
-            "user": {
-                "title": "PC Power Control",
-                "description": "Configure your PC's MAC and IP address",
-                "data": {
-                    "name": "Name",
-                    "host": "Host",
-                    "mac": "MAC Address",
-                    "username": "SSH Username",
-                    "password": "SSH Password"
-                }
-            }
+  "config": {
+    "step": {
+      "user": {
+        "title": "PC Power Control",
+        "description": "Configure your PC's MAC and IP address",
+        "data": {
+          "name": "Name",
+          "host": "Host",
+          "mac": "MAC Address",
+          "username": "SSH Username",
+          "password": "SSH Password",
+          "ssh_port": "SSH Port",
+          "ssh_timeout": "SSH Timeout (seconds)"
         }
-    },
-    "flow_error": {
-        "duplicate_host_or_mac": "This IP or MAC address is already configured."
+      }
     }
+  },
+  "options": {
+    "step": {
+      "user": {
+        "title": "PC Power Control Options",
+        "description": "Update your PC configuration",
+        "data": {
+          "name": "Name",
+          "host": "Host",
+          "mac": "MAC Address",
+          "username": "SSH Username",
+          "password": "SSH Password",
+          "ssh_port": "SSH Port",
+          "ssh_timeout": "SSH Timeout (seconds)"
+        }
+      }
+    }
+  },
+  "services": {
+    "send_ssh_command": {
+      "name": "Send SSH Command",
+      "description": "Send a custom command to the PC via SSH",
+      "fields": {
+        "command": {
+          "name": "Command",
+          "description": "The command to execute on the remote PC"
+        },
+        "timeout": {
+          "name": "Timeout",
+          "description": "Command timeout in seconds (optional)"
+        }
+      }
+    }
+  },
+  "flow_error": {
+    "duplicate_host_or_mac": "This IP or MAC address is already configured."
+  }
 }

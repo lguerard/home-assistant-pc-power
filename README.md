@@ -46,7 +46,7 @@ You can install this integration using either **HACS** (recommended) or **manual
 
 If you don’t use HACS:
 
-1. Download this repository as a ZIP:  
+1. Download this repository as a ZIP:
    [https://github.com/Timman70/home-assistant-pc-power/archive/refs/heads/main.zip](https://github.com/Timman70/home-assistant-pc-power/archive/refs/heads/main.zip)
 
 2. Extract it.
@@ -74,13 +74,15 @@ If you don’t use HACS:
 
 When adding the integration, you'll need:
 
-| Field     | Description                        |
-|-----------|------------------------------------|
-| `Name`    | Friendly name for the PC           |
-| `Host`    | IP address of the PC               |
-| `MAC`     | MAC address for Wake-on-LAN        |
-| `Username`| Windows user with SSH access       |
-| `Password`| SSH password                       |
+| Field         | Description                       | Default |
+| ------------- | --------------------------------- | ------- |
+| `Name`        | Friendly name for the PC          |         |
+| `Host`        | IP address of the PC              |         |
+| `MAC`         | MAC address for Wake-on-LAN       |         |
+| `Username`    | Windows user with SSH access      |         |
+| `Password`    | SSH password                      |         |
+| `SSH Port`    | SSH port number (optional)        | 22      |
+| `SSH Timeout` | SSH timeout in seconds (optional) | 30      |
 
 ✅ Use `00:11:22:33:44:55` format for MAC address.
 
@@ -114,9 +116,70 @@ All settings are editable directly in the Home Assistant UI.
 
 - The switch entity reflects real-time power state using **ping**.
 - Turning **on** uses Wake-on-LAN magic packet
-- Turning **off** uses:  
+- Turning **off** uses:
   `C:\Windows\System32\shutdown.exe /s /f /t 0`
 - Logging shows success/error for debugging.
+
+---
+
+## 🚀 SSH Command Service
+
+The integration provides a service to send custom commands to your PC via SSH:
+
+### Service: `pc_power_control.send_ssh_command`
+
+**Parameters:**
+- `command` (required): The command to execute on the remote PC
+- `timeout` (optional): Command timeout in seconds (default: configured SSH timeout)
+
+**Examples:**
+
+```yaml
+# Check disk space
+service: pc_power_control.send_ssh_command
+target:
+  entity_id: switch.my_pc
+data:
+  command: "dir C:\\"
+
+# Restart a service
+service: pc_power_control.send_ssh_command
+target:
+  entity_id: switch.my_pc
+data:
+  command: "net restart spooler"
+  timeout: 60
+
+# Get system information
+service: pc_power_control.send_ssh_command
+target:
+  entity_id: switch.my_pc
+data:
+  command: "systeminfo | findstr /C:\"Total Physical Memory\""
+```
+
+**Response:** The service returns a dictionary with:
+- `success`: Boolean indicating if the command executed successfully
+- `stdout`: Command standard output
+- `stderr`: Command error output (if any)
+- `return_code`: Command exit code
+
+---
+
+## 🎨 Example Configurations
+
+### Bubble Card for Monitor Timeout Control
+
+Want to create a beautiful UI to control your PC's monitor timeout? Check out the included configuration files:
+
+- **[`bubble-card-monitor-timeout.md`](bubble-card-monitor-timeout.md)** - Complete bubble card setup for toggling monitor timeout between 30 minutes and never
+- **[`monitor-timeout-automations.md`](monitor-timeout-automations.md)** - Advanced automations for presence-based and schedule-based monitor control
+
+These examples show how to:
+- Create toggle switches for common Windows power settings
+- Set up automated monitor timeout based on work hours
+- Build presence-based power management
+- Use custom bubble cards with beautiful styling
 
 ---
 
@@ -161,7 +224,7 @@ mode: single
 
 ## 👤 Developer
 
-Created by **TimCloud**  
+Created by **TimCloud**
 🔗 [github.com/Timman70](https://github.com/Timman70)
 
 ---

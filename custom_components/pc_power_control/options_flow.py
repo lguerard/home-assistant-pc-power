@@ -1,8 +1,6 @@
-from homeassistant import config_entries
 import voluptuous as vol
-from homeassistant.core import callback
+from homeassistant import config_entries
 
-from .const import DOMAIN
 
 class PCPowerControlOptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry):
@@ -18,11 +16,17 @@ class PCPowerControlOptionsFlowHandler(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema({
-                vol.Required("name", default=data.get("name", "")): str,
-                vol.Required("host", default=data.get("host", "")): str,
-                vol.Required("mac", default=data.get("mac", "")): str,
-                vol.Required("username", default=data.get("username", "")): str,
-                vol.Required("password", default=data.get("password", "")): str,
-            })
+            data_schema=vol.Schema(
+                {
+                    vol.Required("name", default=data.get("name", "")): str,
+                    vol.Required("host", default=data.get("host", "")): str,
+                    vol.Required("mac", default=data.get("mac", "")): str,
+                    vol.Required("username", default=data.get("username", "")): str,
+                    vol.Required("password", default=data.get("password", "")): str,
+                    vol.Optional("ssh_port", default=data.get("ssh_port", 22)): int,
+                    vol.Optional(
+                        "ssh_timeout", default=data.get("ssh_timeout", 30)
+                    ): int,
+                }
+            ),
         )

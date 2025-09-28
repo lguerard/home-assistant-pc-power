@@ -1,15 +1,21 @@
-from homeassistant import config_entries
 import voluptuous as vol
+from homeassistant import config_entries
 from homeassistant.core import callback
+
 from .const import DOMAIN
 
-CONFIG_SCHEMA = vol.Schema({
-    vol.Required("name"): str,
-    vol.Required("host"): str,
-    vol.Required("mac"): str,
-    vol.Required("username"): str,
-    vol.Required("password"): str,
-})
+CONFIG_SCHEMA = vol.Schema(
+    {
+        vol.Required("name"): str,
+        vol.Required("host"): str,
+        vol.Required("mac"): str,
+        vol.Required("username"): str,
+        vol.Required("password"): str,
+        vol.Optional("ssh_port", default=22): int,
+        vol.Optional("ssh_timeout", default=30): int,
+    }
+)
+
 
 class PCPowerControlConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input=None):
@@ -23,10 +29,13 @@ class PCPowerControlConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 options=user_input,
             )
 
-        return self.async_show_form(step_id="user", data_schema=CONFIG_SCHEMA, errors=errors)
+        return self.async_show_form(
+            step_id="user", data_schema=CONFIG_SCHEMA, errors=errors
+        )
 
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
         from .options_flow import PCPowerControlOptionsFlowHandler
+
         return PCPowerControlOptionsFlowHandler(config_entry)

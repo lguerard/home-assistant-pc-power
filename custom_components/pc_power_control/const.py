@@ -14,6 +14,9 @@ DEFAULT_SSH_TIMEOUT = 30
 # During this window, the integration will treat the PC as ON to avoid a
 # premature ping-based off state while the machine boots.
 DEFAULT_BOOT_GRACE = 60
+# How long (seconds) to hold the monitor switch state after issuing a change
+# to allow the remote OS to apply the setting before re-querying.
+DEFAULT_MONITOR_PROPAGATION_GRACE = 10
 
 # Monitor timeout switch
 MONITOR_TIMEOUT_ENABLED_COMMAND = "powercfg -change -monitor-timeout-ac 30"

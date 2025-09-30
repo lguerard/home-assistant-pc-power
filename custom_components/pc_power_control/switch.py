@@ -7,6 +7,7 @@ from homeassistant.components.switch import SwitchEntity
 
 from .const import (
     DEFAULT_BOOT_GRACE,
+    DEFAULT_MONITOR_PROPAGATION_GRACE,
     DEFAULT_SSH_TIMEOUT,
     DOMAIN,
     MONITOR_TIMEOUT_CHECK_COMMAND,
@@ -102,6 +103,8 @@ class PCPowerSwitch(SwitchEntity):
         self._ssh_client = None
         # Timestamp of last Wake-on-LAN packet sent (monotonic seconds)
         self._last_wol_time = None
+        # Stronger: timestamp until which we force the entity to be ON
+        self._force_on_until = None
 
     @property
     def is_on(self):
@@ -114,12 +117,16 @@ class PCPowerSwitch(SwitchEntity):
         self._attr_is_on = True
         # record monotonic time so we can suppress immediate ping-off checks
         try:
-            self._last_wol_time = asyncio.get_event_loop().time()
+            now = asyncio.get_event_loop().time()
         except Exception:
             # Fallback to time.monotonic if event loop time unavailable
             import time as _time
 
-            self._last_wol_time = _time.monotonic()
+            now = _time.monotonic()
+
+        self._last_wol_time = now
+        # Force ON until this timestamp to protect against race conditions
+        self._force_on_until = now + DEFAULT_BOOT_GRACE
         # Update HA state immediately so Developer Tools / UI reflect change
         try:
             self.async_write_ha_state()
@@ -135,6 +142,8 @@ class PCPowerSwitch(SwitchEntity):
             # consider success only when command returned exit code 0
             if result and result.get("return_code") == 0:
                 self._attr_is_on = False
+                # clear any force-on window
+                self._force_on_until = None
                 _LOGGER.info("Shutdown command executed successfully")
                 try:
                     self.async_write_ha_state()
@@ -176,13 +185,11 @@ class PCPowerSwitch(SwitchEntity):
 
             now = _time.monotonic()
 
-        if (
-            self._last_wol_time is not None
-            and (now - self._last_wol_time) < DEFAULT_BOOT_GRACE
-        ):
+        # If a force-on timestamp is set and we're still within it, keep ON
+        if self._force_on_until is not None and now < self._force_on_until:
             _LOGGER.debug(
-                "Within boot grace window (%.1fs remaining)",
-                DEFAULT_BOOT_GRACE - (now - self._last_wol_time),
+                "Within force-on window (%.1fs remaining)",
+                self._force_on_until - now,
             )
             self._attr_is_on = True
             return
@@ -399,6 +406,9 @@ class PCMonitorTimeoutSwitch(SwitchEntity):
         self._attr_unique_id = f"pc_monitor_timeout_{host.replace('.', '_')}"
         self._attr_icon = "mdi:monitor-off"
         self._attr_device_class = None
+        # Time until which we should avoid re-querying the monitor setting
+        self._propagation_grace_until = None
+        self._last_command_time = None
 
     @property
     def available(self) -> bool:
@@ -431,6 +441,15 @@ class PCMonitorTimeoutSwitch(SwitchEntity):
                 self._attr_is_on = True
                 _LOGGER.info("Monitor timeout enabled successfully")
                 # Write state immediately for faster UI feedback
+                # set propagation grace so we don't immediately re-query
+                try:
+                    now = asyncio.get_event_loop().time()
+                except Exception:
+                    import time as _time
+
+                    now = _time.monotonic()
+                self._last_command_time = now
+                self._propagation_grace_until = now + DEFAULT_MONITOR_PROPAGATION_GRACE
                 self.async_write_ha_state()
             else:
                 _LOGGER.error(
@@ -456,6 +475,14 @@ class PCMonitorTimeoutSwitch(SwitchEntity):
                 self._attr_is_on = False
                 _LOGGER.info("Monitor timeout disabled successfully")
                 # Write state immediately for faster UI feedback
+                try:
+                    now = asyncio.get_event_loop().time()
+                except Exception:
+                    import time as _time
+
+                    now = _time.monotonic()
+                self._last_command_time = now
+                self._propagation_grace_until = now + DEFAULT_MONITOR_PROPAGATION_GRACE
                 self.async_write_ha_state()
             else:
                 _LOGGER.error(
@@ -476,6 +503,21 @@ class PCMonitorTimeoutSwitch(SwitchEntity):
             if not self._power_switch:
                 _LOGGER.debug(
                     "No power switch reference available to query monitor timeout"
+                )
+                return
+
+            # If we're within the propagation grace window, avoid re-querying
+            try:
+                now = asyncio.get_event_loop().time()
+            except Exception:
+                import time as _time
+
+                now = _time.monotonic()
+
+            if self._propagation_grace_until and now < self._propagation_grace_until:
+                _LOGGER.debug(
+                    "Within monitor propagation grace (%.1fs remaining)",
+                    self._propagation_grace_until - now,
                 )
                 return
 

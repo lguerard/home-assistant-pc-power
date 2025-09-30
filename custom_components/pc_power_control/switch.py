@@ -6,6 +6,7 @@ import wakeonlan
 from homeassistant.components.switch import SwitchEntity
 
 from .const import (
+    DEFAULT_BOOT_GRACE,
     DEFAULT_SSH_TIMEOUT,
     DOMAIN,
     MONITOR_TIMEOUT_CHECK_COMMAND,
@@ -99,6 +100,8 @@ class PCPowerSwitch(SwitchEntity):
         self._attr_icon = "mdi:desktop-classic"
         # Persistent SSH client to reduce connection overhead for repeated commands
         self._ssh_client = None
+        # Timestamp of last Wake-on-LAN packet sent (monotonic seconds)
+        self._last_wol_time = None
 
     @property
     def is_on(self):
@@ -109,6 +112,14 @@ class PCPowerSwitch(SwitchEntity):
         _LOGGER.info("Sending Wake-on-LAN to MAC %s", self._mac)
         wakeonlan.send_magic_packet(self._mac)
         self._attr_is_on = True
+        # record monotonic time so we can suppress immediate ping-off checks
+        try:
+            self._last_wol_time = asyncio.get_event_loop().time()
+        except Exception:
+            # Fallback to time.monotonic if event loop time unavailable
+            import time as _time
+
+            self._last_wol_time = _time.monotonic()
         # Update HA state immediately so Developer Tools / UI reflect change
         try:
             self.async_write_ha_state()
@@ -156,6 +167,26 @@ class PCPowerSwitch(SwitchEntity):
 
     async def async_update(self):
         """Update the current state of the PC by pinging it."""
+        # If we recently sent a Wake-on-LAN packet, assume the PC is booting
+        # and consider it ON for DEFAULT_BOOT_GRACE seconds to avoid flip-flop.
+        try:
+            now = asyncio.get_event_loop().time()
+        except Exception:
+            import time as _time
+
+            now = _time.monotonic()
+
+        if (
+            self._last_wol_time is not None
+            and (now - self._last_wol_time) < DEFAULT_BOOT_GRACE
+        ):
+            _LOGGER.debug(
+                "Within boot grace window (%.1fs remaining)",
+                DEFAULT_BOOT_GRACE - (now - self._last_wol_time),
+            )
+            self._attr_is_on = True
+            return
+
         proc = await asyncio.create_subprocess_exec(
             "ping", "-c", "1", "-W", "1", self._host, stdout=PIPE, stderr=PIPE
         )
@@ -443,7 +474,9 @@ class PCMonitorTimeoutSwitch(SwitchEntity):
         try:
             # Query current monitor timeout setting via power switch helper to reuse SSH connection
             if not self._power_switch:
-                _LOGGER.debug("No power switch reference available to query monitor timeout")
+                _LOGGER.debug(
+                    "No power switch reference available to query monitor timeout"
+                )
                 return
 
             result = await self._power_switch.async_send_ssh_command(

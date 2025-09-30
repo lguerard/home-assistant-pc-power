@@ -97,6 +97,8 @@ class PCPowerSwitch(SwitchEntity):
         self._attr_is_on = False
         self._attr_unique_id = f"pc_power_{mac.replace(':', '').lower()}"
         self._attr_icon = "mdi:desktop-classic"
+        # Persistent SSH client to reduce connection overhead for repeated commands
+        self._ssh_client = None
 
     @property
     def is_on(self):
@@ -107,19 +109,50 @@ class PCPowerSwitch(SwitchEntity):
         _LOGGER.info("Sending Wake-on-LAN to MAC %s", self._mac)
         wakeonlan.send_magic_packet(self._mac)
         self._attr_is_on = True
+        # Update HA state immediately so Developer Tools / UI reflect change
+        try:
+            self.async_write_ha_state()
+        except Exception:
+            # Not critical if writing state fails
+            pass
 
     async def async_turn_off(self, **kwargs):
         """Turn off the PC by sending a shutdown command via SSH."""
         try:
             _LOGGER.info("Sending shutdown command to %s via SSH", self._host)
             result = await self._execute_ssh_command("shutdown -s -f -t 0")
-            if result:
+            # consider success only when command returned exit code 0
+            if result and result.get("return_code") == 0:
                 self._attr_is_on = False
                 _LOGGER.info("Shutdown command executed successfully")
+                try:
+                    self.async_write_ha_state()
+                except Exception:
+                    pass
             else:
-                _LOGGER.error("Failed to execute shutdown command")
+                _LOGGER.error("Failed to execute shutdown command: %s", result)
         except Exception as e:
             _LOGGER.error("Failed to shut down PC: %s", e)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Clean up resources when entity is removed from Home Assistant."""
+        await self.async_close_ssh()
+
+    async def async_close_ssh(self) -> None:
+        """Close any persistent SSH client (runs in executor)."""
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._close_ssh_sync)
+
+    def _close_ssh_sync(self) -> None:
+        """Synchronous close helper for SSH client."""
+        try:
+            if getattr(self, "_ssh_client", None):
+                try:
+                    self._ssh_client.close()
+                except Exception:
+                    pass
+        finally:
+            self._ssh_client = None
 
     async def async_update(self):
         """Update the current state of the PC by pinging it."""
@@ -159,9 +192,12 @@ class PCPowerSwitch(SwitchEntity):
 
         result = await self._execute_ssh_command(command, timeout)
 
+        # Consider success only if we got a result and the return code is 0
+        success = bool(result and result.get("return_code") == 0)
+
         # Return the result for service response
         return {
-            "success": result is not None,
+            "success": success,
             "stdout": result.get("stdout", "") if result else "",
             "stderr": result.get("stderr", "") if result else "",
             "return_code": result.get("return_code", -1) if result else -1,
@@ -228,41 +264,62 @@ class PCPowerSwitch(SwitchEntity):
         """
         import paramiko
 
-        ssh = None
+        # Reuse a persistent SSH client where possible to avoid reconnecting
         try:
-            ssh = paramiko.SSHClient()
-            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            ssh.connect(
-                self._host,
-                port=self._ssh_port,
-                username=self._username,
-                password=self._password,
-                timeout=timeout,
-            )
+            ssh = None
+            try:
+                # Try to reuse existing client
+                if getattr(self, "_ssh_client", None):
+                    transport = self._ssh_client.get_transport()
+                    if transport and transport.is_active():
+                        ssh = self._ssh_client
+                    else:
+                        try:
+                            self._ssh_client.close()
+                        except Exception:
+                            pass
+                        self._ssh_client = None
 
-            stdin, stdout, stderr = ssh.exec_command(command, timeout=timeout)
+                if ssh is None:
+                    # Establish a new client and keep it for reuse
+                    ssh = paramiko.SSHClient()
+                    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                    ssh.connect(
+                        self._host,
+                        port=self._ssh_port,
+                        username=self._username,
+                        password=self._password,
+                        timeout=timeout,
+                    )
+                    self._ssh_client = ssh
 
-            # Wait for command completion
-            exit_status = stdout.channel.recv_exit_status()
+                stdin, stdout, stderr = ssh.exec_command(command, timeout=timeout)
 
-            stdout_text = stdout.read().decode("utf-8", errors="replace").strip()
-            stderr_text = stderr.read().decode("utf-8", errors="replace").strip()
+                # Wait for command completion
+                exit_status = stdout.channel.recv_exit_status()
 
-            return {
-                "stdout": stdout_text,
-                "stderr": stderr_text,
-                "return_code": exit_status,
-            }
+                stdout_text = stdout.read().decode("utf-8", errors="replace").strip()
+                stderr_text = stderr.read().decode("utf-8", errors="replace").strip()
 
-        except Exception as e:
-            _LOGGER.error("SSH connection/execution error: %s", e)
-            return None
-        finally:
-            if ssh:
+                return {
+                    "stdout": stdout_text,
+                    "stderr": stderr_text,
+                    "return_code": exit_status,
+                }
+            except Exception as e:
+                # On error, drop the persistent client so future attempts reconnect
+                _LOGGER.debug("SSH execution error, dropping client: %s", e)
                 try:
-                    ssh.close()
+                    if getattr(self, "_ssh_client", None):
+                        self._ssh_client.close()
                 except Exception:
                     pass
+                self._ssh_client = None
+                _LOGGER.error("SSH connection/execution error: %s", e)
+                return None
+        finally:
+            # Do not close the client here; keep it for reuse
+            pass
 
 
 class PCMonitorTimeoutSwitch(SwitchEntity):
@@ -331,10 +388,19 @@ class PCMonitorTimeoutSwitch(SwitchEntity):
         """Turn on monitor timeout (set to 30 minutes)."""
         try:
             _LOGGER.info("Enabling monitor timeout (30 min) on %s", self._host)
-            result = await self._execute_ssh_command(MONITOR_TIMEOUT_ENABLED_COMMAND)
-            if result and result.get("return_code") == 0:
+            if not self._power_switch:
+                _LOGGER.error("No power switch reference available to run SSH commands")
+                return
+
+            result = await self._power_switch.async_send_ssh_command(
+                MONITOR_TIMEOUT_ENABLED_COMMAND, timeout=self._ssh_timeout
+            )
+
+            if result.get("success") and result.get("return_code") == 0:
                 self._attr_is_on = True
                 _LOGGER.info("Monitor timeout enabled successfully")
+                # Write state immediately for faster UI feedback
+                self.async_write_ha_state()
             else:
                 _LOGGER.error(
                     "Failed to enable monitor timeout: %s",
@@ -347,10 +413,19 @@ class PCMonitorTimeoutSwitch(SwitchEntity):
         """Turn off monitor timeout (disable - never timeout)."""
         try:
             _LOGGER.info("Disabling monitor timeout on %s", self._host)
-            result = await self._execute_ssh_command(MONITOR_TIMEOUT_DISABLED_COMMAND)
-            if result and result.get("return_code") == 0:
+            if not self._power_switch:
+                _LOGGER.error("No power switch reference available to run SSH commands")
+                return
+
+            result = await self._power_switch.async_send_ssh_command(
+                MONITOR_TIMEOUT_DISABLED_COMMAND, timeout=self._ssh_timeout
+            )
+
+            if result.get("success") and result.get("return_code") == 0:
                 self._attr_is_on = False
                 _LOGGER.info("Monitor timeout disabled successfully")
+                # Write state immediately for faster UI feedback
+                self.async_write_ha_state()
             else:
                 _LOGGER.error(
                     "Failed to disable monitor timeout: %s",
@@ -366,8 +441,14 @@ class PCMonitorTimeoutSwitch(SwitchEntity):
             return
 
         try:
-            # Query current monitor timeout setting
-            result = await self._execute_ssh_command(MONITOR_TIMEOUT_CHECK_COMMAND)
+            # Query current monitor timeout setting via power switch helper to reuse SSH connection
+            if not self._power_switch:
+                _LOGGER.debug("No power switch reference available to query monitor timeout")
+                return
+
+            result = await self._power_switch.async_send_ssh_command(
+                MONITOR_TIMEOUT_CHECK_COMMAND, timeout=self._ssh_timeout
+            )
             if result and result.get("return_code") == 0:
                 output = result.get("stdout", "")
                 # Parse the output to determine current timeout
@@ -392,98 +473,4 @@ class PCMonitorTimeoutSwitch(SwitchEntity):
                 _LOGGER.debug("Failed to query monitor timeout status")
         except Exception as e:
             _LOGGER.debug("Error updating monitor timeout status: %s", e)
-
-    async def _execute_ssh_command(
-        self, command: str, timeout: int = None
-    ) -> dict | None:
-        """Execute a command on the remote PC via SSH.
-
-        Parameters
-        ----------
-        command : str
-            The command to execute.
-        timeout : int, optional
-            SSH connection and command timeout in seconds.
-
-        Returns
-        -------
-        dict | None
-            Dictionary with stdout, stderr, and return_code if successful, None if failed.
-        """
-        if timeout is None:
-            timeout = self._ssh_timeout
-
-        try:
-            _LOGGER.debug("Executing SSH command on %s: %s", self._host, command)
-
-            # Run SSH connection in executor to avoid blocking
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None, self._ssh_execute_sync, command, timeout
-            )
-
-            if result:
-                _LOGGER.debug("SSH command executed successfully")
-                if result.get("stderr"):
-                    _LOGGER.debug("Command stderr: %s", result["stderr"])
-            else:
-                _LOGGER.debug("SSH command execution failed")
-
-            return result
-
-        except Exception as e:
-            _LOGGER.error("SSH command execution error: %s", e)
-            return None
-
-    def _ssh_execute_sync(self, command: str, timeout: int) -> dict | None:
-        """Synchronous SSH command execution helper.
-
-        Parameters
-        ----------
-        command : str
-            The command to execute.
-        timeout : int
-            SSH connection timeout in seconds.
-
-        Returns
-        -------
-        dict | None
-            Dictionary with command results or None if failed.
-        """
-        import paramiko
-
-        ssh = None
-        try:
-            ssh = paramiko.SSHClient()
-            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            ssh.connect(
-                self._host,
-                port=self._ssh_port,
-                username=self._username,
-                password=self._password,
-                timeout=timeout,
-            )
-
-            stdin, stdout, stderr = ssh.exec_command(command, timeout=timeout)
-
-            # Wait for command completion
-            exit_status = stdout.channel.recv_exit_status()
-
-            stdout_text = stdout.read().decode("utf-8", errors="replace").strip()
-            stderr_text = stderr.read().decode("utf-8", errors="replace").strip()
-
-            return {
-                "stdout": stdout_text,
-                "stderr": stderr_text,
-                "return_code": exit_status,
-            }
-
-        except Exception as e:
-            _LOGGER.error("SSH connection/execution error: %s", e)
-            return None
-        finally:
-            if ssh:
-                try:
-                    ssh.close()
-                except Exception:
-                    pass
+        # Monitor switch uses the main power switch's SSH helper; nothing else to do here.

@@ -53,6 +53,29 @@ async def test_ssh_command():
     return True
 
 
+def test_monitor_timeout_command_encoding():
+    """Verify MONITOR_TIMEOUT_CHECK_COMMAND is encoded and decodes to the expected script."""
+    import base64
+    import re
+    from pc_power_control import const
+
+    cmd = const.MONITOR_TIMEOUT_CHECK_COMMAND
+    assert "-EncodedCommand" in cmd, "Command should use -EncodedCommand"
+
+    enc = cmd.split("-EncodedCommand", 1)[1].strip()
+    # Some shells may add surrounding quotes; strip them
+    if enc.startswith('"') and enc.endswith('"'):
+        enc = enc[1:-1]
+
+    dec = base64.b64decode(enc.encode("ascii")).decode("utf-16le")
+
+    assert "powercfg -getactivescheme" in dec
+    assert "7516b95f-f776-4464-8c53-06167f40cc99" in dec
+    assert "3c0bc021-c8a8-4e07-a973-6b14cbcb2b7e" in dec
+
+    print("✅ Monitor timeout encoded command decodes correctly")
+
+
 if __name__ == "__main__":
     print("PC Power Control SSH Command Test")
     print("=" * 40)
@@ -65,8 +88,13 @@ if __name__ == "__main__":
     response = input().strip().lower()
     if response == "y":
         try:
+            # Run the encoding test first
+            test_monitor_timeout_command_encoding()
             success = asyncio.run(test_ssh_command())
             sys.exit(0 if success else 1)
+        except AssertionError as ae:
+            print(f"\n❌ Assertion failed: {ae}")
+            sys.exit(1)
         except Exception as e:
             print(f"\n❌ Test failed with error: {e}")
             sys.exit(1)

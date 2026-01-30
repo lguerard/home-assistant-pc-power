@@ -21,4 +21,8 @@ DEFAULT_MONITOR_PROPAGATION_GRACE = 10
 # Monitor timeout switch
 MONITOR_TIMEOUT_ENABLED_COMMAND = "powercfg -change -monitor-timeout-ac 30"
 MONITOR_TIMEOUT_DISABLED_COMMAND = "powercfg -change -monitor-timeout-ac 0"
-MONITOR_TIMEOUT_CHECK_COMMAND = "((powercfg -query @((powercfg -getactivescheme) -replace '^.+ \b([0-9a-f]+-[^ ]+).+', '$1' '7516b95f-f776-4464-8c53-06167f40cc99' '3c0bc021-c8a8-4e07-a973-6b14cbcb2b7e'))[-3] -replace '^.+: ') / 60"
+MONITOR_TIMEOUT_CHECK_COMMAND = (
+    "powershell -NoProfile -NonInteractive -Command "
+    "\"((powercfg -query @((powercfg -getactivescheme) -replace '^.+ \\b([0-9a-f]+-[^ ]+).+', '$1' '7516b95f-f776-4464-8c53-06167f40cc99' '3c0bc021-c8a8-4e07-a973-6b14cbcb2b7e'))[-3] -replace '^.+: ') / 60\""
+)
+

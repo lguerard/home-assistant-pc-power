@@ -18,11 +18,22 @@ DEFAULT_BOOT_GRACE = 60
 # to allow the remote OS to apply the setting before re-querying.
 DEFAULT_MONITOR_PROPAGATION_GRACE = 10
 
+import base64
+
 # Monitor timeout switch
 MONITOR_TIMEOUT_ENABLED_COMMAND = "powercfg -change -monitor-timeout-ac 30"
 MONITOR_TIMEOUT_DISABLED_COMMAND = "powercfg -change -monitor-timeout-ac 0"
-MONITOR_TIMEOUT_CHECK_COMMAND = (
-    "powershell -NoProfile -NonInteractive -Command "
-    "\"((powercfg -query @((powercfg -getactivescheme) -replace '^.+ \\b([0-9a-f]+-[^ ]+).+', '$1' '7516b95f-f776-4464-8c53-06167f40cc99' '3c0bc021-c8a8-4e07-a973-6b14cbcb2b7e'))[-3] -replace '^.+: ') / 60\""
+
+_MONITOR_TIMEOUT_POWERSHELL_SCRIPT = (
+    "$s=(powercfg -getactivescheme); "
+    "if ($s -match '([0-9a-f\\-]{36})') { "
+    "  $guid=$matches[1]; "
+    "  $val=(powercfg -query $guid | Select-String -Pattern '7516b95f-f776-4464-8c53-06167f40cc99|3c0bc021-c8a8-4e07-a973-6b14cbcb2b7e' "
+    "    | ForEach-Object { ($_ -split ':')[-1].Trim() } | Select-Object -First 1); "
+    "  if ($val) { [int]$val / 60 } "
+    "}"
 )
+
+_MONITOR_TIMEOUT_ENC = base64.b64encode(_MONITOR_TIMEOUT_POWERSHELL_SCRIPT.encode('utf-16le')).decode('ascii')
+MONITOR_TIMEOUT_CHECK_COMMAND = f"powershell -NoProfile -NonInteractive -EncodedCommand {_MONITOR_TIMEOUT_ENC}"
 

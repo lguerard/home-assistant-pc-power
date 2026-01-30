@@ -1,0 +1,5 @@
+pre-commit
+black==24.8.0
+ruff
+isort
+mypy
